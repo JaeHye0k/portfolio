@@ -6,10 +6,10 @@ const express = require('express');
 const app = express();
 const port = 2000;
 
-app.use(express.static('public'))
+app.use(express.static('public'));
 
 app.get('/', (request, response) => {
-  fs.readdir('./home_button', 'utf8', function(error, filelist){
+  fs.readdir('./pages', 'utf8', function(error, filelist){
     var title = 'homepage';
     var description = 'Hello';
     var buttonList = template.ListButton(filelist);
@@ -17,24 +17,29 @@ app.get('/', (request, response) => {
     response.send(html);
   });
 });
-app.get('/page/:pageId', (request, response) => {
-  fs.readFile(`home_button/${request.params.pageId}`,'utf8',function(error1, description){
-    fs.readdir('./home_button', 'utf8', function(error2, filelist){
-        var title = request.params.pageId;
-        var buttonList = template.ListButton(filelist);
-        if(title === 'projects'){
-          fs.readdir(`home_button/projects`,function(error3, filelist){
-            var projectList = template.ListProject(filelist);
-            var html = template.HTML(buttonList, title, projectList);
-            response.send(html);
-          });
-        }
-        else {
-          var html = template.HTML(buttonList, title,`<p>${description}</p>`);
+
+app.get('/pages/:pageId', (request, response) => {
+  fs.readdir('./pages', 'utf8', function(err1, filelist){
+    fs.readFile(`./pages/${request.params.pageId}`,'utf8',function(err2, description){
+      var title = request.params.pageId;
+      var buttonList = template.ListButton(filelist);
+      if(title === 'projects'){
+        fs.readdir(`./pages/projects`,function(err3, filelist){
+          var projectList = template.ListProject(filelist);
+          var html = template.HTML(buttonList, title, projectList);
           response.send(html);
-        }
+        });
+      }
+      else {
+        var html = template.HTML(buttonList, title,`<p>${description}</p>`);
+        response.send(html);
+      }
     });
+  });
 });
+
+app.use(function(req, res, next) {
+  res.status(404).send('404 Not Found');
 });
 
 app.listen(port, () => {
