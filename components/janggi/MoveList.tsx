@@ -1,6 +1,9 @@
+"use client";
+
 import { useEffect, useRef } from "react";
 import { formatPly } from "@/lib/janggi";
 import type { NotationStyle, Ply } from "@/lib/janggi";
+import { SIDE_TEXT_CLASS } from "./theme";
 
 export type MoveListProps = {
   plies: readonly Ply[];
@@ -10,8 +13,6 @@ export type MoveListProps = {
   style?: NotationStyle;
   className?: string;
 };
-
-const SIDE_TEXT = { cho: "text-[#1b7a3f]", han: "text-[#c0281a]" } as const;
 
 export default function MoveList({ plies, current, onSelect, style = "hangul", className }: MoveListProps) {
   const listRef = useRef<HTMLOListElement>(null);
@@ -53,7 +54,7 @@ export default function MoveList({ plies, current, onSelect, style = "hangul", c
               }`}
             >
               <span className="w-8 shrink-0 text-right text-neutral-500">{n}.</span>
-              <span className={active ? "" : SIDE_TEXT[ply.side]}>{formatPly(ply, style)}</span>
+              <span className={active ? "" : SIDE_TEXT_CLASS[ply.side]}>{formatPly(ply, style)}</span>
             </button>
           </li>
         );

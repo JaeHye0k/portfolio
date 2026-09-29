@@ -1,5 +1,6 @@
 import { FILES, RANKS, pieceGlyph, sameSquare } from "@/lib/janggi";
 import type { Board, Piece, Ply, Side, Square } from "@/lib/janggi";
+import { BOARD_COLOR, SIDE_COLOR } from "./theme";
 
 export type JanggiBoardProps = {
   board: Board;
@@ -7,6 +8,8 @@ export type JanggiBoardProps = {
   orientation?: Side;
   /** 출발·도착칸을 강조할 수. */
   lastPly?: Ply | null;
+  /** 장군을 당한 진영. 그 진영의 장에 표시가 붙는다. */
+  checkedSide?: Side | null;
   /** 추가로 표시할 칸(게임에서 이동 가능 칸 등). */
   highlights?: readonly Square[];
   /** 선택된 칸(게임에서 집은 기물). */
@@ -21,8 +24,6 @@ const MARGIN = 44;
 const WIDTH = (FILES - 1) * UNIT + MARGIN * 2;
 const HEIGHT = (RANKS - 1) * UNIT + MARGIN * 2;
 const PIECE_R = 25;
-
-const SIDE_COLOR: Record<Side, string> = { cho: "#1b7a3f", han: "#c0281a" };
 
 function point(square: Square, orientation: Side): { x: number; y: number } {
   const file = orientation === "cho" ? square.file : FILES + 1 - square.file;
@@ -46,11 +47,22 @@ function octagon(cx: number, cy: number, r: number): string {
     .join(" ");
 }
 
+function findKing(board: Board, side: Side): Square | null {
+  for (let rank = 1; rank <= RANKS; rank++) {
+    for (let file = 1; file <= FILES; file++) {
+      const piece = board[rank - 1][file - 1];
+      if (piece && piece.side === side && piece.type === "king") return { rank, file };
+    }
+  }
+  return null;
+}
+
 /** SVG 장기판. 표시 전용이며 상태를 갖지 않는다. */
 export default function JanggiBoard({
   board,
   orientation = "cho",
   lastPly,
+  checkedSide,
   highlights = [],
   selected,
   onSquareClick,
@@ -59,6 +71,7 @@ export default function JanggiBoard({
 }: JanggiBoardProps) {
   const from = lastPly?.kind === "move" ? lastPly.from : null;
   const to = lastPly?.kind === "move" ? lastPly.to : null;
+  const checkedKing = checkedSide ? findKing(board, checkedSide) : null;
   const lines: string[] = [];
   for (let rank = 1; rank <= RANKS; rank++) {
     const a = point({ rank, file: 1 }, "cho");
@@ -87,23 +100,23 @@ export default function JanggiBoard({
       className={className}
       style={{ width: "100%", height: "auto", display: "block", userSelect: "none" }}
     >
-      <rect x={0} y={0} width={WIDTH} height={HEIGHT} fill="#e8c88f" />
+      <rect x={0} y={0} width={WIDTH} height={HEIGHT} fill={BOARD_COLOR.background} />
       <rect
         x={MARGIN - 8}
         y={MARGIN - 8}
         width={(FILES - 1) * UNIT + 16}
         height={(RANKS - 1) * UNIT + 16}
         fill="none"
-        stroke="#7a5a2a"
+        stroke={BOARD_COLOR.frame}
         strokeWidth={3}
       />
-      <path d={lines.join(" ")} stroke="#5a3d16" strokeWidth={1.5} fill="none" />
+      <path d={lines.join(" ")} stroke={BOARD_COLOR.line} strokeWidth={1.5} fill="none" />
 
       {showCoordinates &&
         Array.from({ length: FILES }, (_, i) => i + 1).map((file) => {
           const p = point({ rank: RANKS, file }, orientation);
           return (
-            <text key={`f${file}`} x={p.x} y={HEIGHT - 12} fontSize={13} textAnchor="middle" fill="#7a5a2a">
+            <text key={`f${file}`} x={p.x} y={HEIGHT - 12} fontSize={13} textAnchor="middle" fill={BOARD_COLOR.frame}>
               {file}
             </text>
           );
@@ -112,7 +125,7 @@ export default function JanggiBoard({
         Array.from({ length: RANKS }, (_, i) => i + 1).map((rank) => {
           const p = point({ rank, file: 1 }, orientation);
           return (
-            <text key={`r${rank}`} x={14} y={p.y + 4} fontSize={13} textAnchor="middle" fill="#7a5a2a">
+            <text key={`r${rank}`} x={14} y={p.y + 4} fontSize={13} textAnchor="middle" fill={BOARD_COLOR.frame}>
               {rank === 10 ? 0 : rank}
             </text>
           );
@@ -125,7 +138,7 @@ export default function JanggiBoard({
           cy={point(from, orientation).y}
           r={10}
           fill="none"
-          stroke="#2b6cb0"
+          stroke={BOARD_COLOR.marker}
           strokeWidth={3}
           opacity={0.8}
         />
@@ -137,7 +150,7 @@ export default function JanggiBoard({
           cx={point(sq, orientation).x}
           cy={point(sq, orientation).y}
           r={8}
-          fill="#2b6cb0"
+          fill={BOARD_COLOR.marker}
           opacity={0.45}
         />
       ))}
@@ -147,6 +160,7 @@ export default function JanggiBoard({
         const { x, y } = point(sq, orientation);
         const isTo = to ? sameSquare(sq, to) : false;
         const isSelected = selected ? sameSquare(sq, selected) : false;
+        const isChecked = checkedKing ? sameSquare(sq, checkedKing) : false;
         const clickable = !!onSquareClick;
         return (
           <g
@@ -160,7 +174,7 @@ export default function JanggiBoard({
               <>
                 <polygon
                   points={octagon(x, y, piece.type === "king" ? PIECE_R + 3 : PIECE_R)}
-                  fill="#f8e9c9"
+                  fill={BOARD_COLOR.piece}
                   stroke={SIDE_COLOR[piece.side]}
                   strokeWidth={isTo || isSelected ? 4 : 2}
                 />
@@ -179,7 +193,19 @@ export default function JanggiBoard({
               </>
             )}
             {(isTo || isSelected) && (
-              <circle cx={x} cy={y} r={PIECE_R + 6} fill="none" stroke="#2b6cb0" strokeWidth={3} opacity={0.9} />
+              <circle cx={x} cy={y} r={PIECE_R + 6} fill="none" stroke={BOARD_COLOR.marker} strokeWidth={3} opacity={0.9} />
+            )}
+            {isChecked && (
+              <circle
+                data-marker="check"
+                cx={x}
+                cy={y}
+                r={PIECE_R + 9}
+                fill="none"
+                stroke={BOARD_COLOR.check}
+                strokeWidth={3}
+                strokeDasharray="6 4"
+              />
             )}
           </g>
         );

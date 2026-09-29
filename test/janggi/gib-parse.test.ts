@@ -95,6 +95,23 @@ describe("parseGib: moves", () => {
     expect(record.meta.result).toEqual({ winner: null, reason: "unknown", raw: "미상" });
   });
 
+  it("separates a comment glued to a move", () => {
+    const [record] = parseGib(KAKAO_GAME.replace("1. 71楚卒72", "1. 71楚卒72{좋은 수}"));
+    expect(record.plies).toHaveLength(12);
+    expect(record.comments).toEqual([{ ply: 1, text: "좋은 수" }]);
+  });
+
+  it("wraps an out-of-range square in GibParseError", () => {
+    let error: unknown;
+    try {
+      parseGib(KAKAO_GAME.replace("1. 71楚卒72", "1. 70楚卒72"));
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(GibParseError);
+    expect((error as GibParseError).token).toBe("70楚卒72");
+  });
+
   it("accepts a move number glued to the move", () => {
     const [record] = parseGib(KAKAO_GAME.replace("1. 71楚卒72", "1.71楚卒72"));
     expect(record.plies[0]).toMatchObject({ from: { rank: 7, file: 1 } });

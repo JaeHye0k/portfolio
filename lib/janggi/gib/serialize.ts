@@ -9,6 +9,7 @@ function formatPlayer(player: Player): string {
   return player.grade ? `${player.name} ${player.grade}` : player.name;
 }
 
+/** GIB 태그 값에는 이스케이프 규약이 없어 큰따옴표는 작은따옴표로 바꿔 쓴다 (손실 지점). */
 function tag(key: string, value: string): string {
   return `[${key} "${value.replace(/"/g, "'")}"]`;
 }
@@ -24,7 +25,7 @@ export function serializeGame(record: GameRecord): string {
     tag("초대국자", formatPlayer(meta.players.cho) || "미상"),
     tag("한대국자", formatPlayer(meta.players.han) || "미상"),
   ];
-  if (setup.formations && !setup.handicap) {
+  if (setup.formations) {
     lines.push(tag("초차림", setup.formations.cho), tag("한차림", setup.formations.han));
   }
   lines.push(
@@ -32,7 +33,10 @@ export function serializeGame(record: GameRecord): string {
     tag("총수", String(plies.length)),
     tag("대국결과", meta.result.raw || "미상"),
   );
-  if (!setup.formations || setup.handicap) lines.push(tag("판", formatBoardNotation(setup)));
+  // 차림만으로 복원되지 않는 배치(접장기, 임의 배치, 한 선수)는 판 태그로 적는다.
+  if (!setup.formations || setup.handicap || setup.turn !== "cho") {
+    lines.push(tag("판", formatBoardNotation(setup)));
+  }
   lines.push("");
 
   const commentsAt = new Map<number, string[]>();

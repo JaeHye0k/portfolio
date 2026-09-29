@@ -1,3 +1,5 @@
+"use client";
+
 import { ChevronLeft, ChevronRight, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { ReplayController } from "./useReplay";
 
@@ -44,7 +46,9 @@ export default function ReplayControls({ controller, className }: ReplayControls
       <button type="button" className={btn} onClick={last} disabled={atEnd} aria-label="마지막으로">
         <SkipForward size={16} />
       </button>
-      <span className="ml-1 font-mono text-[13px] tabular-nums" aria-live="polite" aria-label="현재 수">
+      {/* 읽어 주기는 JanggiViewer의 상태 줄(aria-live)이 맡는다. 여기서는 중복 안내를 피한다. */}
+      <span className="ml-1 font-mono text-[13px] tabular-nums" data-testid="ply-counter">
+        <span className="sr-only">현재 수 </span>
         {ply} / {length}
       </span>
       <label className="ml-auto flex items-center gap-1 text-[12px] text-neutral-700">

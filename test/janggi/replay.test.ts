@@ -46,6 +46,9 @@ describe("createReplay", () => {
     expect(replay.frames[2].error?.ply).toBe(2);
     expect(replay.frames[3].error?.ply).toBe(2);
     expect(replay.frames[3].board).toBe(replay.frames[1].board);
+    // 차례는 기보의 수 순서를 계속 따른다
+    expect(replay.frames[2].turn).toBe("cho");
+    expect(replay.frames[3].turn).toBe("cho");
   });
 
   it("clamps ply indexes", () => {
@@ -53,5 +56,7 @@ describe("createReplay", () => {
     expect(clampPly(replay, -3)).toBe(0);
     expect(clampPly(replay, 7.9)).toBe(7);
     expect(clampPly(replay, 99)).toBe(20);
+    expect(clampPly(replay, Number.NaN)).toBe(0);
+    expect(clampPly(replay, Number.POSITIVE_INFINITY)).toBe(0);
   });
 });

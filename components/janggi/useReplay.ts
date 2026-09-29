@@ -1,3 +1,5 @@
+"use client";
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { clampPly, createReplay } from "@/lib/janggi";
 import type { GameRecord, Replay, ReplayFrame } from "@/lib/janggi";
@@ -6,6 +8,12 @@ export type UseReplayOptions = {
   initialPly?: number;
   /** 자동 재생 간격(ms). */
   intervalMs?: number;
+  /**
+   * 진행 중인 대국을 따라갈지. `record`가 바뀌었을 때
+   * - true: 끝을 보고 있었으면 새 끝으로, 아니면 보던 위치를 유지한다 (게임 화면용).
+   * - false(기본): `initialPly`로 돌아간다 (다른 기보를 연 경우).
+   */
+  followTip?: boolean;
 };
 
 export type ReplayController = {
@@ -28,26 +36,30 @@ export type ReplayController = {
   setIntervalMs: (ms: number) => void;
 };
 
-/**
- * 기보 재생 상태. `record`가 바뀌면 처음 위치로 돌아간다.
- * 게임 화면에서는 진행 중인 `GameRecord`를 그대로 넘겨 복기용으로 쓸 수 있다.
- */
+type State = { replay: Replay; ply: number };
+
+/** 기보 재생 상태. */
 export function useReplay(record: GameRecord, options: UseReplayOptions = {}): ReplayController {
+  const { initialPly = 0, followTip = false } = options;
   const replay = useMemo(() => createReplay(record), [record]);
-  const [state, setState] = useState(() => ({ replay, ply: clampPly(replay, options.initialPly ?? 0) }));
+  const [state, setState] = useState<State>(() => ({ replay, ply: clampPly(replay, initialPly) }));
   const [playing, setPlaying] = useState(false);
   const [intervalMs, setIntervalMs] = useState(options.intervalMs ?? 800);
 
-  // record가 바뀌면 렌더 중에 상태를 맞춘다 (React의 "adjusting state on prop change" 패턴).
+  // record가 바뀌면 렌더 중에 상태를 맞춘다. React가 이 렌더를 버리고 새 상태로 다시 그리지만,
+  // 이 렌더도 예외 없이 끝나야 하므로 새 ply를 여기서도 쓴다.
+  let ply = state.ply;
   if (state.replay !== replay) {
-    setState({ replay, ply: clampPly(replay, options.initialPly ?? 0) });
+    const wasAtTip = state.ply >= state.replay.length;
+    ply = followTip
+      ? wasAtTip
+        ? replay.length
+        : clampPly(replay, state.ply)
+      : clampPly(replay, initialPly);
+    setState({ replay, ply });
   }
-  const ply = state.replay === replay ? state.ply : clampPly(replay, options.initialPly ?? 0);
 
-  const goTo = useCallback(
-    (target: number) => setState((s) => ({ replay: s.replay, ply: clampPly(s.replay, target) })),
-    [],
-  );
+  const goTo = useCallback((target: number) => setState((s) => ({ replay: s.replay, ply: clampPly(s.replay, target) })), []);
   const next = useCallback(() => setState((s) => ({ replay: s.replay, ply: clampPly(s.replay, s.ply + 1) })), []);
   const prev = useCallback(() => setState((s) => ({ replay: s.replay, ply: clampPly(s.replay, s.ply - 1) })), []);
   const first = useCallback(() => goTo(0), [goTo]);

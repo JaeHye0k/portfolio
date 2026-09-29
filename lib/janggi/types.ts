@@ -85,11 +85,15 @@ export type Setup = {
 /** `ply`번째 수 뒤에 붙은 주석. 0이면 첫 수 앞. */
 export type Comment = { ply: number; text: string };
 
+/**
+ * 대국 하나. 불변으로 다룬다. 진행 중인 대국에 수를 더할 때는
+ * `{ ...record, plies: [...record.plies, ply] }`처럼 새 객체를 만든다.
+ */
 export type GameRecord = {
   meta: GameMeta;
   setup: Setup;
-  plies: Ply[];
-  comments: Comment[];
+  plies: ReadonlyArray<Ply>;
+  comments: ReadonlyArray<Comment>;
 };
 
 /** 형식별 텍스트를 도메인 모델로 바꾼다. 한 텍스트에 여러 대국이 들어 있을 수 있다. */

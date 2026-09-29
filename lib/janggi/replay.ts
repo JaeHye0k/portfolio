@@ -25,6 +25,7 @@ export type Replay = {
 };
 
 export function clampPly(replay: Replay, ply: number): number {
+  if (!Number.isFinite(ply)) return 0;
   return Math.min(Math.max(Math.floor(ply), 0), replay.length);
 }
 
@@ -37,7 +38,7 @@ export function createReplay(record: GameRecord): Replay {
   record.plies.forEach((ply, i) => {
     const prev = frames[i];
     if (firstError) {
-      frames.push({ ...prev, ply: i + 1, lastPly: ply, error: firstError });
+      frames.push({ ...prev, ply: i + 1, turn: opposite(ply.side), lastPly: ply, error: firstError });
       return;
     }
     try {
@@ -49,7 +50,7 @@ export function createReplay(record: GameRecord): Replay {
           ? new ReplayError(`${i + 1}수: ${e.message}`, i + 1)
           : new ReplayError(`${i + 1}수: ${String(e)}`, i + 1);
       firstError = error;
-      frames.push({ ...prev, ply: i + 1, lastPly: ply, error });
+      frames.push({ ...prev, ply: i + 1, turn: opposite(ply.side), lastPly: ply, error });
     }
   });
   return { record, length: record.plies.length, frames, error: firstError };

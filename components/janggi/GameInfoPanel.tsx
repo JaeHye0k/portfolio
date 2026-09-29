@@ -1,4 +1,5 @@
 import type { GameMeta, Setup, Side } from "@/lib/janggi";
+import { SIDE_BADGE_CLASS } from "./theme";
 
 export type GameInfoPanelProps = {
   meta: GameMeta;
@@ -6,17 +7,14 @@ export type GameInfoPanelProps = {
   className?: string;
 };
 
-const SIDE_BADGE: Record<Side, string> = {
-  cho: "bg-[#1b7a3f] text-white",
-  han: "bg-[#c0281a] text-white",
-};
-
 function PlayerRow({ side, meta, setup }: { side: Side; meta: GameMeta; setup: Setup }) {
   const player = meta.players[side];
   const isWinner = meta.result.winner === side;
   return (
     <div className="flex items-center gap-2">
-      <span className={`inline-flex h-6 w-6 shrink-0 items-center justify-center text-[12px] font-bold ${SIDE_BADGE[side]}`}>
+      <span
+        className={`inline-flex h-6 w-6 shrink-0 items-center justify-center text-[12px] font-bold ${SIDE_BADGE_CLASS[side]}`}
+      >
         {side === "cho" ? "楚" : "漢"}
       </span>
       <span className="font-semibold">{player.name || "미상"}</span>

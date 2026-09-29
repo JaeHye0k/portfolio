@@ -14,6 +14,9 @@ export type GibFileViewerProps = {
 
 type Loaded = { name: string; records: GameRecord[] };
 
+/** 파싱은 메인 스레드에서 동기로 돈다. 코퍼스 파일(100국, 200KB)이 수십 ms이므로 이 상한이면 충분하다. */
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+
 function describe(record: GameRecord, index: number): string {
   const { cho, han } = record.meta.players;
   const result = record.meta.result.raw ? ` · ${record.meta.result.raw}` : "";
@@ -63,6 +66,10 @@ export default function GibFileViewer({ sampleUrl, sampleLabel = "샘플 기보 
   const loadFile = useCallback(
     async (file: File | undefined) => {
       if (!file) return;
+      if (file.size > MAX_FILE_BYTES) {
+        setError(`${file.name}: 파일이 너무 큽니다 (${(file.size / 1024 / 1024).toFixed(1)}MB, 최대 ${MAX_FILE_BYTES / 1024 / 1024}MB).`);
+        return;
+      }
       load(file.name, await file.arrayBuffer());
     },
     [load],
@@ -102,7 +109,11 @@ export default function GibFileViewer({ sampleUrl, sampleLabel = "샘플 기보 
           e.preventDefault();
           setDragging(true);
         }}
-        onDragLeave={() => setDragging(false)}
+        onDragLeave={(e) => {
+          // 자식 요소로 들어갈 때도 dragleave가 발화하므로 실제로 영역을 벗어날 때만 끈다.
+          if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
+          setDragging(false);
+        }}
         onDrop={onDrop}
         className={`flex flex-wrap items-center gap-3 border-2 border-dashed px-4 py-3 ${
           dragging ? "border-accent bg-accent-100" : "border-divider bg-surface"

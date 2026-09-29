@@ -28,6 +28,24 @@ describe("serializeGib", () => {
     expect(again.comments).toEqual(original.comments);
   });
 
+  it("keeps a non-cho first mover on a standard setup via the 판 tag", () => {
+    const [base] = parseGib(MULTI_GAME_FILE);
+    const record: GameRecord = {
+      ...base,
+      setup: { ...base.setup, turn: "han" },
+      plies: [],
+      comments: [],
+    };
+    const text = serializeGame(record);
+    expect(text).toContain('[초차림 "상마상마"]');
+    expect(text).toMatch(/\[판 ".* 한 접장기"\]/);
+    const [again] = parseGib(text);
+    expect(again.setup.turn).toBe("han");
+    expect(again.setup.handicap).toBe(false);
+    expect(again.setup.formations).toEqual(base.setup.formations);
+    expect(again.setup.board).toEqual(base.setup.board);
+  });
+
   it("writes kakao-style moves six per line", () => {
     const [record] = parseGib(MULTI_GAME_FILE);
     const lines = serializeGame(record).split("\r\n");

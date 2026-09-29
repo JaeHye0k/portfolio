@@ -134,9 +134,13 @@ export interface GameRecordSerializer { readonly format: string; serialize(recor
 ## 6. 코어 동작
 
 - `decodeGib(bytes)`: UTF-8 fatal 디코딩을 먼저 시도하고 실패하면 EUC-KR. `\x1a` 제거.
-- `parseGib(text)`: `[대회명` 앞에서 대국을 분리. 헤더는 정규식, 본문은 `{주석}`을 먼저 걷어내
-  주석 위치(직전 수 번호)를 기록한 뒤 공백 토큰화. 문법에 맞지 않는 토큰은 `GibParseError`
+- `parseGib(text)`: 태그 블록이 새로 시작하는 줄마다 대국을 분리한다 (특정 키에 의존하지 않아
+  첫 태그가 `대회명`이 아닌 파일도 받는다). 본문은 `{주석}`과 공백·중괄호 아닌 글자 덩어리를
+  한 정규식으로 차례로 뽑아, 주석은 직전 수 번호에 붙이고 나머지는 수로 해석한다. 주석이 수에
+  붙어 있어도(`79졸78{좋은 수}`) 분리된다. 문법에 맞지 않는 토큰과 범위 밖 칸은 `GibParseError`
   (대국 인덱스, 수 번호, 토큰 포함). 태그 누락은 빈 문자열로 관용 처리.
+- `판` 태그와 차림 태그가 함께 있으면 표준 배치에서 선수만 다른 대국으로 본다. 직렬화는
+  `handicap`이거나 차림이 없거나 선수가 초가 아닐 때 `판`을 쓴다.
 - `createStandardSetup(formations)`, `parseBoardNotation(판)`, `formatBoardNotation(setup)`.
 - `applyPly(board, ply)`: 출발칸 기물·잡은 기물이 일치하지 않으면 `ReplayError`. 새 보드 반환.
 - `createReplay(record)`: 프레임 `{ ply, board, turn, lastPly, error? }`를 0..n까지 한 번에 계산.
@@ -146,14 +150,21 @@ export interface GameRecordSerializer { readonly format: string; serialize(recor
 ## 7. UI
 
 - `JanggiBoard`: SVG. 9×10 교차점, 궁성 대각선, 기물은 팔각형 배경 + 한자. 초는 초록, 한은 빨강.
-  `orientation`(아래쪽 진영, 기본 초), `lastPly` 강조(출발·도착), `check` 표시,
-  `onSquareClick(square)`와 `highlights`는 게임에서 재사용하기 위한 훅.
-- `useReplay(record)`: `ply`, `frame`, `goTo/next/prev/first/last`, `playing/toggle`, `speed`.
-  record가 바뀌면 0으로 리셋. 자동 재생은 `setInterval`.
-- `JanggiViewer`: 좌측 판, 우측 정보·컨트롤·수순 목록. 키보드 ←/→/Home/End/Space.
-  모바일은 세로 스택.
-- `GibFileViewer`: `<input type="file">` + 드롭존, 샘플 버튼. 파일은 `arrayBuffer()` → `decodeGib`
-  → `parseGib`. 여러 대국이면 `<select>`로 선택. 파싱 오류는 인라인 메시지.
+  `orientation`(아래쪽 진영, 기본 초), `lastPly` 강조(출발·도착), `checkedSide`(장군 당한 장에
+  점선 링), `onSquareClick(square, piece)`·`highlights`·`selected`는 게임에서 재사용하기 위한 훅.
+  칸 단위 키보드 포커스 이동은 게임의 입력 방식이 정해질 때 함께 설계한다.
+- `useReplay(record, { initialPly, intervalMs, followTip })`: `ply`, `frame`,
+  `goTo/next/prev/first/last`, `playing/toggle`, `intervalMs`. record가 바뀌면 `initialPly`로
+  리셋하되, `followTip`이면 끝을 보고 있던 경우 새 끝으로 따라가고 아니면 보던 위치를 유지한다
+  (진행 중인 대국 복기용). 자동 재생은 한 수마다 `setTimeout`.
+- `JanggiViewer`: 좌측 판, 우측 정보·컨트롤·수순 목록. 키보드 ←/→/Home/End/Space는 창 전체에서
+  받되, 입력 요소에 포커스가 있으면 무시하고 버튼에 포커스가 있으면 스페이스를 버튼에 양보한다.
+  뷰어가 여럿이면 마지막으로 만진 뷰어만 반응한다. 모바일은 세로 스택.
+- 색상은 `components/janggi/theme.ts` 한 곳에 둔다 (게임 프로젝트로 옮길 때 전역 CSS에 의존하지
+  않도록 `@theme` 토큰 대신 상수).
+- `GibFileViewer`: `<input type="file">` + 드롭존, 샘플 버튼, `?sample` 쿼리로 샘플 자동 열기.
+  파일은 10MB 상한 안에서 `arrayBuffer()` → `decodeGib` → `parseGib`. 여러 대국이면 `<select>`로
+  선택. 파싱 오류는 대국 번호·수 번호를 붙인 인라인 메시지.
 
 ## 8. 테스트
 

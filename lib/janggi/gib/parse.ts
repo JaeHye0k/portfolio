@@ -12,7 +12,9 @@ import type {
   ResultReason,
   Setup,
   Side,
+  Square,
 } from "../types";
+import { stripControlChars } from "./decode";
 
 export class GibParseError extends Error {
   constructor(
@@ -33,10 +35,15 @@ const MOVE_TOKEN =
   /^(\d\d)([楚漢초한])?([\p{Script=Hangul}\p{Script=Han}])(\d\d)([\p{Script=Hangul}\p{Script=Han}])?(장군)?$/u;
 const PASS_TOKEN = /^(한수쉼|한수쉬|쉼|pass)$/i;
 const MOVE_NUMBER = /^(\d+)\.(.*)$/;
+/** `{주석}` 또는 공백·중괄호가 아닌 글자 덩어리. 주석이 수에 붙어 있어도(`79졸78{좋은 수}`) 분리된다. */
+const BODY_TOKEN = /\{([^}]*)\}|([^\s{}]+)/g;
 
 type RawGame = { headerLines: string[]; bodyLines: string[] };
 
-/** 태그 블록이 새로 시작하는 지점마다 대국을 나눈다. */
+/**
+ * 태그 블록이 새로 시작하는 지점마다 대국을 나눈다.
+ * 특정 키(`대회명`)에 의존하지 않으므로 첫 태그가 다른 파일도 받을 수 있다.
+ */
 function splitGames(text: string): RawGame[] {
   const games: RawGame[] = [];
   let current: RawGame | null = null;
@@ -90,21 +97,28 @@ export function parseResult(text: string): GameResult {
   return { winner, reason, raw };
 }
 
+function readFormation(tags: Record<string, string>, key: string, gameIndex: number): Formation | undefined {
+  const value = tags[key]?.trim();
+  if (!value) return undefined;
+  if (!isFormation(value)) throw new GibParseError(`${key} 값이 차림이 아닙니다: ${value}`, gameIndex);
+  return value;
+}
+
 function parseSetup(tags: Record<string, string>, gameIndex: number): Setup {
+  const cho = readFormation(tags, "초차림", gameIndex);
+  const han = readFormation(tags, "한차림", gameIndex);
   if (tags["판"]) {
+    let setup: Setup;
     try {
-      return parseBoardNotation(tags["판"]);
+      setup = parseBoardNotation(tags["판"]);
     } catch (e) {
       throw new GibParseError(`판 태그를 해석할 수 없습니다: ${(e as Error).message}`, gameIndex);
     }
+    // 차림 태그가 함께 있으면 표준 배치에서 선수만 다른 대국이다 (직렬화가 그렇게 쓴다).
+    if (cho && han) return { ...setup, formations: { cho, han }, handicap: false };
+    return setup;
   }
-  const formation = (key: string): Formation => {
-    const value = tags[key]?.trim();
-    if (!value) return "마상상마";
-    if (!isFormation(value)) throw new GibParseError(`${key} 값이 차림이 아닙니다: ${value}`, gameIndex);
-    return value;
-  };
-  return createStandardSetup({ cho: formation("초차림"), han: formation("한차림") });
+  return createStandardSetup({ cho: cho ?? "마상상마", han: han ?? "마상상마" });
 }
 
 function parseMeta(tags: Record<string, string>): GameMeta {
@@ -120,16 +134,26 @@ function parseMeta(tags: Record<string, string>): GameMeta {
   };
 }
 
-/** 수 토큰 하나를 해석한다. `turn`은 진영 표기가 없을 때 쓰는 차례. */
+function trySquare(text: string): Square | undefined {
+  try {
+    return parseSquare(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/** 수 토큰 하나를 해석한다. `turn`은 진영 표기가 없을 때 쓰는 차례. 문법에 맞지 않으면 undefined. */
 export function parseMoveToken(token: string, turn: Side): Ply | undefined {
   if (PASS_TOKEN.test(token)) return { kind: "pass", side: turn };
   const m = MOVE_TOKEN.exec(token);
   if (!m) return undefined;
-  const [, from, sideChar, pieceChar, to, capturedChar, check] = m;
+  const [, fromText, sideChar, pieceChar, toText, capturedChar, check] = m;
   const side = sideChar ? sideFromChar(sideChar) ?? turn : turn;
   const piece = pieceTypeFromChar(pieceChar);
-  if (!piece) return undefined;
-  const ply: Ply = { kind: "move", side, piece, from: parseSquare(from), to: parseSquare(to), check: !!check };
+  const from = trySquare(fromText);
+  const to = trySquare(toText);
+  if (!piece || !from || !to) return undefined;
+  const ply: Ply = { kind: "move", side, piece, from, to, check: !!check };
   if (capturedChar) {
     const captured = pieceTypeFromChar(capturedChar);
     if (!captured) return undefined;
@@ -143,8 +167,7 @@ function parseBody(body: string, setup: Setup, gameIndex: number): { plies: Ply[
   const comments: Comment[] = [];
   let turn = setup.turn;
   let lastNumber: number | undefined;
-  const pattern = /\{([^}]*)\}|(\S+)/g;
-  for (const m of body.matchAll(pattern)) {
+  for (const m of body.matchAll(BODY_TOKEN)) {
     if (m[1] !== undefined) {
       const text = m[1].trim();
       if (text) comments.push({ ply: plies.length, text });
@@ -179,6 +202,6 @@ function parseGame(raw: RawGame, gameIndex: number): GameRecord {
  * 바이트에서 시작한다면 먼저 `decodeGib`으로 문자열을 만든다.
  */
 export function parseGib(text: string): GameRecord[] {
-  const normalized = text.replace(/\r\n?/g, "\n").replace(//g, "");
+  const normalized = stripControlChars(text).replace(/\r\n?/g, "\n");
   return splitGames(normalized).map(parseGame);
 }

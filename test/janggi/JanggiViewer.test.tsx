@@ -8,8 +8,11 @@ import { ASSOCIATION_GAME, COMMENTED_GAME, HANDICAP_GAME } from "./fixtures";
 
 const record = parseGib(ASSOCIATION_GAME)[0];
 
-function counter() {
-  return screen.getByLabelText("현재 수");
+function counters() {
+  return screen.getAllByTestId("ply-counter");
+}
+function expectPly(n: number, length: number) {
+  expect(counters()[0]).toHaveTextContent(new RegExp(`^현재 수 ${n} / ${length}$`));
 }
 
 describe("JanggiViewer", () => {
@@ -18,7 +21,7 @@ describe("JanggiViewer", () => {
     expect(screen.getByRole("img", { name: "장기판" })).toBeInTheDocument();
     expect(screen.getByText("2023 신인왕전 · 결승")).toBeInTheDocument();
     expect(screen.getByText("초선수")).toBeInTheDocument();
-    expect(counter()).toHaveTextContent("0 / 20");
+    expectPly(0, 20);
     const list = screen.getByRole("list", { name: "수순" });
     expect(within(list).getAllByRole("button")).toHaveLength(21);
     expect(within(list).getByText("09차29차장군")).toBeInTheDocument();
@@ -30,34 +33,79 @@ describe("JanggiViewer", () => {
     render(<JanggiViewer record={record} onPlyChange={onPlyChange} />);
     expect(screen.getByRole("button", { name: "이전 수" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "다음 수" }));
-    expect(counter()).toHaveTextContent("1 / 20");
+    expectPly(1, 20);
     expect(onPlyChange).toHaveBeenLastCalledWith(1);
     await user.click(screen.getByRole("button", { name: "마지막으로" }));
-    expect(counter()).toHaveTextContent("20 / 20");
+    expectPly(20, 20);
     expect(screen.getByRole("button", { name: "다음 수" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "처음으로" }));
-    expect(counter()).toHaveTextContent("0 / 20");
+    expectPly(0, 20);
   });
 
-  it("jumps when a move in the list is clicked and shows the check marker", async () => {
+  it("calls onPlyChange once per ply change even with an inline callback", async () => {
     const user = userEvent.setup();
-    render(<JanggiViewer record={record} />);
+    const calls: number[] = [];
+    const { rerender } = render(<JanggiViewer record={record} onPlyChange={(p) => calls.push(p)} />);
+    rerender(<JanggiViewer record={record} onPlyChange={(p) => calls.push(p)} />);
+    rerender(<JanggiViewer record={record} onPlyChange={(p) => calls.push(p)} />);
+    await user.click(screen.getByRole("button", { name: "다음 수" }));
+    expect(calls).toEqual([0, 1]);
+  });
+
+  it("jumps when a move in the list is clicked and marks the checked king", async () => {
+    const user = userEvent.setup();
+    const { container } = render(<JanggiViewer record={record} />);
+    expect(container.querySelector("circle[data-marker='check']")).toBeNull();
     await user.click(screen.getByRole("button", { name: /09차29차장군/ }));
-    expect(counter()).toHaveTextContent("19 / 20");
+    expectPly(19, 20);
     expect(screen.getByText(/19\. 09차29차장군 \(장군\)/)).toBeInTheDocument();
+    // 한의 장은 2행 5열 → x = 44 + 4*60, y = 44 + 60
+    const check = container.querySelector("circle[data-marker='check']")!;
+    expect(check.getAttribute("cx")).toBe("284");
+    expect(check.getAttribute("cy")).toBe("104");
   });
 
   it("responds to keyboard shortcuts", async () => {
     const user = userEvent.setup();
     render(<JanggiViewer record={record} />);
     await user.keyboard("{ArrowRight}{ArrowRight}");
-    expect(counter()).toHaveTextContent("2 / 20");
+    expectPly(2, 20);
     await user.keyboard("{ArrowLeft}");
-    expect(counter()).toHaveTextContent("1 / 20");
+    expectPly(1, 20);
     await user.keyboard("{End}");
-    expect(counter()).toHaveTextContent("20 / 20");
+    expectPly(20, 20);
     await user.keyboard("{Home}");
-    expect(counter()).toHaveTextContent("0 / 20");
+    expectPly(0, 20);
+  });
+
+  it("lets a focused button handle the space key instead of toggling playback", async () => {
+    const user = userEvent.setup();
+    render(<JanggiViewer record={record} />);
+    screen.getByRole("button", { name: "다음 수" }).focus();
+    await user.keyboard(" ");
+    expectPly(1, 20);
+    expect(screen.getByRole("button", { name: "재생" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("routes keyboard input to the viewer that was interacted with last", async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <section aria-label="first">
+          <JanggiViewer record={record} />
+        </section>
+        <section aria-label="second">
+          <JanggiViewer record={parseGib(HANDICAP_GAME)[0]} />
+        </section>
+      </>,
+    );
+    await user.keyboard("{ArrowRight}");
+    expect(counters()[0]).toHaveTextContent(/1 \/ 20$/);
+    expect(counters()[1]).toHaveTextContent(/0 \/ 6$/);
+    await user.click(within(screen.getByRole("region", { name: "second" })).getByRole("button", { name: "판 뒤집기" }));
+    await user.keyboard("{ArrowRight}");
+    expect(counters()[0]).toHaveTextContent(/1 \/ 20$/);
+    expect(counters()[1]).toHaveTextContent(/1 \/ 6$/);
   });
 
   it("shows the comment attached to the current ply", async () => {
@@ -81,7 +129,21 @@ describe("JanggiViewer", () => {
     const { rerender } = render(<JanggiViewer record={record} />);
     await user.click(screen.getByRole("button", { name: "마지막으로" }));
     rerender(<JanggiViewer record={parseGib(HANDICAP_GAME)[0]} />);
-    expect(counter()).toHaveTextContent("0 / 6");
+    expectPly(0, 6);
+  });
+
+  it("follows a growing record when followTip is set", async () => {
+    const user = userEvent.setup();
+    const grown = { ...record, plies: [...record.plies, ...parseGib(ASSOCIATION_GAME)[0].plies.slice(0, 0)] };
+    const short = { ...record, plies: record.plies.slice(0, 5) };
+    const { rerender } = render(<JanggiViewer record={short} followTip />);
+    await user.click(screen.getByRole("button", { name: "마지막으로" }));
+    expectPly(5, 5);
+    rerender(<JanggiViewer record={{ ...short, plies: record.plies.slice(0, 6) }} followTip />);
+    expectPly(6, 6);
+    await user.click(screen.getByRole("button", { name: "이전 수" }));
+    rerender(<JanggiViewer record={grown} followTip />);
+    expectPly(5, 20);
   });
 
   it("reports an integrity error instead of crashing", () => {
